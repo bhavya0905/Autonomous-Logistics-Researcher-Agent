@@ -1,5 +1,7 @@
-from tools.search_tool import SearchTool
+from tools.web_scraper import WebScraper
 
-search = SearchTool()
+scraper = WebScraper()
 
-print("Search tool initialized")
+text = scraper.scrape("https://en.wikipedia.org/wiki/Logistics")
+
+print(text[:500])
