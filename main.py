@@ -1,12 +1,5 @@
-from memory.vector_db import VectorDB
+from tools.search_tool import SearchTool
 
-db = VectorDB()
+search = SearchTool()
 
-db.add_document(
-    "doc1",
-    "Autonomous trucks are transforming logistics supply chains."
-)
-
-results = db.search("future logistics automation")
-
-print(results)
+print("Search tool initialized")
