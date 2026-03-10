@@ -39,12 +39,19 @@ class ResearchAgent:
             if not url:
                 continue
 
-            content = self.scraper.scrape(url)
+            page = self.scraper.scrape(url)
 
-            if content:
+            if page and len(page["text"]) > 300:
 
-                doc_id = f"research_{i}"
+               text = page["text"]
+               title = page["title"]
 
-                self.memory.add_document(doc_id, content)
+               self.memory.add_document(
+                   text,
+                   metadata={
+                       "source": url,
+                       "title": title
+                  }
+            )
 
-                print(f"Stored research document {doc_id}")
+            print(f"Stored research document from {url}")
