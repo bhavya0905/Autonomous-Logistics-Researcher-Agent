@@ -10,3 +10,4 @@ crewai
 langchain-text-splitters
 langchain-groq
 rank-bm25
+readability-lxml

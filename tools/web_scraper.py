@@ -1,6 +1,6 @@
-import requests
+from readability import Document
 from bs4 import BeautifulSoup
-
+import requests
 
 class WebScraper:
 
@@ -9,27 +9,38 @@ class WebScraper:
             "User-Agent": "Mozilla/5.0"
         }
 
-    def scrape(self, url: str) -> None | dict:
+def scrape(self, url: str):
 
-        try:
-            response = requests.get(url, headers=self.headers, timeout=10)
+    try:
+        response = requests.get(url, headers=self.headers, timeout=10)
 
-            if response.status_code != 200:
-                return None
-
-            soup = BeautifulSoup(response.text, "html.parser")
-
-            page_title = soup.title.string.strip() if soup.title else "Unknown"
-
-            paragraphs = soup.find_all("p")
-
-            text = " ".join(p.get_text() for p in paragraphs)
-
-            return {
-                "text": text.strip(),
-                "title": page_title
-}
-
-        except Exception as e:
-            print("Scraping error:", e)
+        if response.status_code != 200:
             return None
+        
+        if "text/html" not in response.headers.get("Content-Type", ""):
+            return None
+
+        doc = Document(response.text)
+
+        title = doc.short_title()
+
+        main_html = doc.summary()
+
+        soup = BeautifulSoup(main_html, "html.parser")
+
+        paragraphs = soup.find_all("p")
+
+        text = " ".join(p.get_text(strip=True) for p in paragraphs)
+
+        if len(text) < 400:
+            return None
+
+        return {
+            "url": url,
+            "title": title,
+            "text": text.strip()
+        }
+
+    except Exception as e:
+        print("Scraping error:", e)
+        return None
