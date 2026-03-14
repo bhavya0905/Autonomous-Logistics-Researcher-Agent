@@ -1,66 +1,39 @@
-import hashlib
 from memory.vector_db import VectorDB
-import uuid
-
 
 class KnowledgeStore:
+    """
+    Responsible for storing already-chunked documents into the vector database.
+    Acts as the ingestion layer between the research pipeline and the vector DB.
+    """
 
     def __init__(self):
-
         self.vector_db = VectorDB()
 
-        # chunk settings
-        self.chunk_size = 500
-        self.chunk_overlap = 100
+    def store_document(self, chunks: list[dict]) -> None:
+        """
+        Store pre-chunked documents into the vector database.
 
-
-    def _generate_doc_id(self, text: str):
-
-        return hashlib.md5(text.encode()).hexdigest()
-
-
-    def _chunk_text(self, text: str):
-
-        chunks = []
-
-        start = 0
-        length = len(text)
-
-        while start < length:
-
-            end = start + self.chunk_size
-
-            chunk = text[start:end]
-
-            chunks.append(chunk)
-
-            start += self.chunk_size - self.chunk_overlap
-
-        return chunks
-
-    def store_document(self, text: str, title: str, source: str):
-
-        chunks = self._chunk_text(text)
-
-        doc_id = str(uuid.uuid4())
-
-        for idx, chunk in enumerate(chunks):
-
-            chunk_id = f"{doc_id}_{idx}"
-
-            metadata = {
-                "doc_id": doc_id,
-                "chunk_id": chunk_id,
-                "source": source,
-                "title": title,
-                "section": "unknown",  # placeholder for future section extraction
-                "chunk_index": idx
+        Expected chunk format:
+        [
+            {
+                "text": "...",
+                "metadata": {
+                    "title": "...",
+                    "url": "...",
+                    "section": "optional"
+                }
             }
+        ]
+        """
 
-            self.vector_db.add_document(
-                text=chunk,
-                metadata=metadata
-            )
+        if not chunks:
+            print("[KnowledgeStore] No chunks to store.")
+            return
 
-    
-            
+        try:
+            self.vector_db.add_document(chunks)
+
+            print(f"[KnowledgeStore] Stored {len(chunks)} chunks.")
+
+        except Exception as e:
+            print(f"[KnowledgeStore] Failed storing document: {e}")

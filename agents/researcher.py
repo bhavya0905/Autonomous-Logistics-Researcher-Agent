@@ -3,6 +3,7 @@ from tools.search_tool import SearchTool
 from tools.web_scraper import WebScraper
 from tools.knowledge_store import KnowledgeStore
 from urllib.parse import urlparse
+from memory.chunker import SemanticChunker
 
 class ResearchAgent:
 
@@ -11,6 +12,8 @@ class ResearchAgent:
         self.search_tool = SearchTool()
         self.scraper = WebScraper()
         self.knowledge_store = KnowledgeStore()
+        self.chunker = SemanticChunker()
+        self.scraped_domains = set()
 
         self.agent = Agent(
             role="Logistics Research Specialist",
@@ -22,20 +25,18 @@ class ResearchAgent:
             verbose=True
         )
 
-        def filter_unique_domains(self, urls):
+    def filter_unique_domains(self, urls):
+        seen_domains = set()
+        filtered_urls = []
 
-            seen_domains = set()
-            filtered_urls = []
+        for url in urls:
+            domain = urlparse(url).netloc   
 
-            for url in urls:
+            if domain not in self.scraped_domains:
+                filtered_urls.append(url)
+                self.scraped_domains.add(domain)
 
-                domain = urlparse(url).netloc
-
-                if domain not in seen_domains:
-                   filtered_urls.append(url)
-                   seen_domains.add(domain)
-
-            return filtered_urls
+        return filtered_urls
 
     def research(self, query):
 
@@ -51,14 +52,15 @@ class ResearchAgent:
                 if not page:
                      continue
 
-                text = page["text"]
-                title = page["title"]
+                document = {
+                    "text": page["text"],
+                    "title": page["title"],
+                    "url": url
+                }
 
-                self.knowledge_store.store_document(
-                    text=text,
-                    title=title,
-                    source=url
-                )
+                chunks = self.chunker.chunk(document)
+
+                self.knowledge_store.store_document(chunks)
 
             except Exception as e:
 

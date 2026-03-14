@@ -3,26 +3,12 @@ import uuid
 import chromadb
 from chromadb.utils import embedding_functions
 from config.settings import get_settings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 class VectorDB:
 
     def __init__(self):
         settings = get_settings()
-
-# text splitter for chunking documents
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=100,
-            separators=[
-                "\n\n",
-                "\n",
-                ". ",
-                " "
-            ]
-        )
-
 
 # persistent vector database
         self.client = chromadb.PersistentClient(
@@ -39,23 +25,32 @@ class VectorDB:
             name="logistics_knowledge",
             embedding_function=self.embedding_function
 )   
-    def add_document(self, text: str, metadata: dict | None = None) -> None:
-
-        chunks = self.text_splitter.split_text(text)
+    
+    def add_document(self, chunks: list[dict]) -> None:
+        """
+        Store pre-chunked documents.
+        Each chunk must be a dict:
+        {
+            "text": "...",
+            "metadata": {...}
+        }
+        """
 
         doc_id = str(uuid.uuid4())
 
         for i, chunk in enumerate(chunks):
 
+            text = chunk["text"]
+            metadata = chunk.get("metadata", {}).copy()
+
             chunk_id = f"{doc_id}_{i}"
 
-            chunk_metadata = metadata.copy() if metadata else {}
-
-            chunk_metadata.update({
+            metadata.update({
                 "doc_id": doc_id,
                 "chunk_id": chunk_id,
                 "chunk_index": i,
-                "section": chunk_metadata.get("section", "unknown")
+                "section": metadata.get("section", "unknown"),
+                "source": metadata.get("url")
             })
 
             existing = self.collection.get(ids=[chunk_id])
@@ -65,9 +60,10 @@ class VectorDB:
 
             self.collection.add(
                 ids=[chunk_id],
-                documents=[chunk],
-                metadatas=[chunk_metadata]
+                documents=[text],
+                metadatas=[metadata]
             )
+
     
     def search(self, query, n_results=5):
 
@@ -77,14 +73,23 @@ class VectorDB:
         )
 
         documents = []
-    
-        docs = results.get("documents", [[]])[0]
-        metas = results.get("metadatas", [[]])[0]
 
-        for text, meta in zip(docs, metas):
+        docs = results.get("documents")
+        metas = results.get("metadatas")
+        scores = results.get("distances")
+
+        if not docs or not metas:
+            return []
+
+        docs = docs[0]
+        metas = metas[0]
+        scores = scores[0] if scores else [None] * len(docs)
+
+        for text, meta, score in zip(docs, metas, scores):
             documents.append({
                 "text": text,
-                "metadata": meta
+                "metadata": meta,
+                "score": score
             })
 
-        return documents
+        return documents        
