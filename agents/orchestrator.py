@@ -2,6 +2,7 @@ from agents.query_planner import QueryPlanner
 from agents.researcher import ResearchAgent
 from agents.analyst import AnalystAgent
 from agents.writer import WriterAgent
+from evaluation.evaluator import Evaluator
 
 
 class Orchestrator:
@@ -12,6 +13,8 @@ class Orchestrator:
         self.researcher = ResearchAgent()
         self.analyst = AnalystAgent()
         self.writer = WriterAgent()
+        self.evaluator = Evaluator()
+
 
         self.max_research_rounds = 3
 
@@ -49,6 +52,16 @@ class Orchestrator:
 
         print("\n[Orchestrator] Generating report...\n")
 
-        report = self.writer.write_report(analysis)
+        report = self.writer.write_report(analysis, documents)
+        
+        evaluation = self.evaluator.evaluate(
+            query=user_query,
+            retrieved_chunks=documents,
+            report=report,
+            citations=[]
+        )
+
+        print("\n[Evaluator] Evaluation Results:")
+        print(evaluation)
 
         return report

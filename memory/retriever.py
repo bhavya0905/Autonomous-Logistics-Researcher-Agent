@@ -90,10 +90,15 @@ Return each query on a new line.
         # Hybrid End
         reranked_docs = self.rerank(query, combined_docs, top_k=k)
 
-        docs_with_citations = self.citation_manager.attach_citations(reranked_docs)
-
-        return docs_with_citations
+        return reranked_docs
 
     def build_context(self, documents):
+        texts = []
 
-        return "\n\n".join(documents)
+        for doc in documents:
+            if isinstance(doc, dict):
+                texts.append(doc.get("text", ""))
+            else:
+                texts.append(str(doc))
+
+        return "\n\n".join(texts)
