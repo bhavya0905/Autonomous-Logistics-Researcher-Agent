@@ -6,8 +6,6 @@ from evaluation.evaluator import Evaluator
 from utils.logger import logger
 
 
-
-
 class Orchestrator:
 
     def __init__(self):
@@ -17,8 +15,7 @@ class Orchestrator:
         self.analyst = AnalystAgent()
         self.writer = WriterAgent()
         self.evaluator = Evaluator()
-
-
+       
         self.max_research_rounds = 3
 
     def run(self, user_query):
@@ -67,5 +64,5 @@ class Orchestrator:
 
         print("\n[Evaluator] Evaluation Results:")
         print(evaluation)
-
+          
         return report
