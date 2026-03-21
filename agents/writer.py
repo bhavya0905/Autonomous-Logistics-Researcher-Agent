@@ -1,57 +1,85 @@
-from urllib import response
-from annotated_types import doc
 from langchain_groq import ChatGroq
-from pydantic_settings import sources
 from config.settings import get_settings
 from utils.logger import logger
 
 
 class WriterAgent:
-
     def __init__(self):
-
         self.settings = get_settings()
 
         self.llm = ChatGroq(
             model=self.settings.MODEL_NAME,
-            temperature=0.3,
+            temperature=0,
             groq_api_key=self.settings.GROQ_API_KEY
         )
 
-    def write_report(self, analysis: str, documents: list):
-        
-        sources = []
+    # --------------------------------------------------
+    # MAIN WRITE FUNCTION
+    # --------------------------------------------------
+    def write_report(self, query: str, context: str):
+        prompt = self._build_prompt(query, context)
 
-        for i, doc in enumerate(documents, 1):
-            meta = doc.get("metadata", {})
-            source = meta.get("url", "unknown")
-            sources.append(f"[{i}] {source}")
-
-        sources_text = "\n".join(sources)
-
-        prompt = f"""
-        You are a professional research report writer.
-
-        Convert the following analysis into a clear structured report.
-
-        Use the provided sources to support claims and reference them using
-        [1], [2], etc.
-
-        Structure the report with these sections:
-
-        1. Executive Summary
-        2. Key Insights
-        3. Detailed Explanation
-        4. Conclusion
-
-        Sources:
-        {sources_text}
-
-        Analysis:
-        {analysis}
-    """
-        
         response = self.llm.invoke(prompt)
-        report = response.content
-        logger.info("Research report generated")
-        return report
+
+        return response.content
+
+    # --------------------------------------------------
+    # PROMPT BUILDER (CRITICAL)
+    # --------------------------------------------------
+    def _build_prompt(self, query: str, context: str):
+        return f"""
+You are a research analyst, not a content writer.
+
+Your job is to produce a structured, evidence-based report.
+
+---
+
+STRICT RULES:
+
+1. Every claim MUST be grounded in the provided context
+2. You MUST cite chunk IDs like [1], [2]
+3. DO NOT repeat the same idea across sections
+4. If multiple chunks say the same thing → merge into ONE insight
+5. If information conflicts → explicitly highlight it
+6. DO NOT use generic filler language
+7. DO NOT summarize blindly — synthesize insights
+
+---
+
+INPUT:
+
+User Query:
+{query}
+
+Context Chunks:
+{context}
+
+---
+
+OUTPUT FORMAT:
+
+# Overview
+- Max 4–5 lines
+- High-level understanding of topic
+
+# Key Findings
+- Bullet points
+- Each bullet MUST include citations
+
+# Detailed Analysis
+- Group by themes (not chunks)
+- Each paragraph MUST include citations
+
+# Contradictions / Gaps
+- Conflicting claims OR missing areas
+
+# Conclusion
+- Final synthesized insight
+- NOT a summary
+
+---
+
+IMPORTANT:
+- If a claim has no citation → DO NOT include it
+- Prefer fewer high-quality insights over many weak ones
+"""

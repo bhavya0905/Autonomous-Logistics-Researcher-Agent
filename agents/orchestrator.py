@@ -1,3 +1,5 @@
+from multiprocessing import context
+from memory.retriever import Retriever
 from agents.query_planner import QueryPlanner
 from agents.researcher import ResearchAgent
 from agents.analyst import AnalystAgent
@@ -15,47 +17,36 @@ class Orchestrator:
         self.analyst = AnalystAgent()
         self.writer = WriterAgent()
         self.evaluator = Evaluator()
-       
+        self.retriever = Retriever()
         self.max_research_rounds = 3
-
+        
     def run(self, user_query):
-        logger.info(f"Research started for query: {user_query}")
-
         print("\n[Orchestrator] Starting research process...\n")
 
-        research_round = 0
+        # Generate search queries
+        queries = self.planner.generate_queries(user_query)
 
-        while research_round < self.max_research_rounds:
+        # Run research (populate vector DB)
+        for q in queries:
+            self.researcher.research(q)
 
-            print(f"\n[Orchestrator] Research Round {research_round + 1}")
+        print("\n[Orchestrator] Retrieving relevant documents...\n")
 
-            documents = []
+        # Retrieve
+        documents = self.retriever.retrieve(user_query)
 
-            # Knowledge coverage check
-            if len(documents) >= 3:
-
-               print("[Orchestrator] Knowledge coverage sufficient.")
-               break
-
-            print("[Orchestrator] Knowledge insufficient. Generating research queries.")
-
-            queries = self.planner.generate_queries(user_query)
-
-            for q in queries:
-                self.researcher.research(q)
-
-            research_round += 1
-
-
-        documents = self.analyst.retriever.retrieve(user_query)
-        print("\n[Orchestrator] Running final analysis...\n")
-
-        analysis = self.analyst.analyze(user_query)
+        if not documents:
+            return "No relevant information found."
 
         print("\n[Orchestrator] Generating report...\n")
 
-        report = self.writer.write_report(analysis, documents)
-        
+        # Build context
+        context = self.retriever.build_context(documents)
+
+        # Write report
+        report = self.writer.write_report(user_query, context)
+
+        # Evaluate
         evaluation = self.evaluator.evaluate(
             query=user_query,
             retrieved_chunks=documents,
@@ -65,5 +56,5 @@ class Orchestrator:
 
         print("\n[Evaluator] Evaluation Results:")
         print(evaluation)
-          
+
         return report

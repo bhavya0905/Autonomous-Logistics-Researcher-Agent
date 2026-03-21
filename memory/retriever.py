@@ -3,7 +3,6 @@ from langchain_groq import ChatGroq
 from config.settings import get_settings
 from sentence_transformers import CrossEncoder
 from memory.citation_manager import CitationManager
-from rank_bm25 import BM25Okapi
 from utils.logger import logger
 
 
@@ -19,14 +18,20 @@ class Retriever:
             groq_api_key=self.settings.GROQ_API_KEY
         )
 
+        # Strong cross-encoder for reranking
         self.reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
-    # -----------------------------
-    # Query Expansion
-    # -----------------------------
+    # --------------------------------------------------
+    # QUERY EXPANSION
+    # --------------------------------------------------
     def expand_query(self, query: str):
         prompt = f"""
-Generate 4 alternative search queries for the following topic.
+Generate 4 diverse semantic search queries for the topic below.
+
+Focus on:
+- different angles
+- different terminology
+- deeper subtopics
 
 Topic: {query}
 
@@ -41,35 +46,31 @@ Return each query on a new line.
             if q.strip()
         ]
 
+        # Always include original query
         return [query] + queries
 
-    # -----------------------------
-    # Keyword Search (BM25)
-    # -----------------------------
-    def keyword_search(self, query, documents, top_k=5):
-        if not documents:
-            return []
+    # --------------------------------------------------
+    # LIMIT CHUNKS PER SOURCE (IMPORTANT)
+    # --------------------------------------------------
+    def limit_per_source(self, documents, max_per_source=2):
+        source_counts = {}
+        filtered = []
 
-        def get_text(doc):
-            return doc["text"] if isinstance(doc, dict) else doc
+        for doc in documents:
+            url = doc.get("metadata", {}).get("url", "unknown")
 
-        tokenized_docs = [get_text(doc).split() for doc in documents]
-        bm25 = BM25Okapi(tokenized_docs)
+            count = source_counts.get(url, 0)
+            if count >= max_per_source:
+                continue
 
-        tokenized_query = query.split()
-        scores = bm25.get_scores(tokenized_query)
+            source_counts[url] = count + 1
+            filtered.append(doc)
 
-        ranked = sorted(
-            zip(documents, scores),
-            key=lambda x: x[1],
-            reverse=True
-        )
+        return filtered
 
-        return [doc for doc, score in ranked[:top_k]]
-
-    # -----------------------------
-    # Reranking (FIXED)
-    # -----------------------------
+    # --------------------------------------------------
+    # RERANKING (PURE SEMANTIC)
+    # --------------------------------------------------
     def rerank(self, query, documents, top_k=5):
         if not documents:
             return []
@@ -77,69 +78,59 @@ Return each query on a new line.
         pairs = [(query, doc["text"]) for doc in documents]
         scores = self.reranker.predict(pairs)
 
-        weighted = []
-        split_index = len(documents) // 2  # semantic first, keyword later
+        ranked = sorted(
+            zip(documents, scores),
+            key=lambda x: x[1],
+            reverse=True
+        )
 
-        for i, (doc, score) in enumerate(zip(documents, scores)):
-            if i < split_index:
-                score *= 1.3  # semantic boost
-            weighted.append((doc, score))
+        return [doc for doc, _ in ranked[:top_k]]
 
-        ranked = sorted(weighted, key=lambda x: x[1], reverse=True)
-
-        # deduplicate AFTER ranking
-        seen = set()
-        final = []
-
-        for doc, score in ranked:
-            if doc["text"] not in seen:
-                seen.add(doc["text"])
-                final.append(doc)
-
-            if len(final) >= top_k:
-                break
-
-        return final
-
-    # -----------------------------
+    # --------------------------------------------------
     # MAIN RETRIEVE
-    # -----------------------------
-    def retrieve(self, query: str, k: int = 3):
+    # --------------------------------------------------
+    def retrieve(self, query: str, k: int = 5):
         queries = self.expand_query(query)
 
         all_docs = []
 
+        # NO EARLY BREAK — collect broadly
         for q in queries:
-            results = self.vector_db.search(q, n_results=k)
-            if results:
-                all_docs.extend(results)
+            results = self.vector_db.search(q, n_results=10)
 
-        # deduplicate early
-        unique_docs = all_docs
+            if not results:
+                continue
 
-        # hybrid retrieval
-        keyword_docs = self.keyword_search(query, unique_docs, top_k=k)
+            all_docs.extend(results)
 
-        # combine (NO duplication hack)
-        combined_docs = unique_docs + keyword_docs
+        if not all_docs:
+            logger.warning(f"No documents found for query: {query}")
+            return []
 
-        # rerank with weighting
-        reranked_docs = self.rerank(query, combined_docs, top_k=k)
+        # CONTROL diversity instead of killing it
+        filtered_docs = self.limit_per_source(all_docs, max_per_source=2)
 
-        logger.info(f"Retriever returned {len(reranked_docs)} chunks for query: {query}")
+        # FINAL AUTHORITY = reranker
+        reranked_docs = self.rerank(query, filtered_docs, top_k=k)
+
+        logger.info(
+            f"Retriever: {len(reranked_docs)} results selected "
+            f"from {len(all_docs)} candidates for query: {query}"
+        )
 
         return reranked_docs
 
-    # -----------------------------
-    # CONTEXT BUILDER
-    # -----------------------------
+    # --------------------------------------------------
+    # CONTEXT BUILDER (WITH IDS FOR WRITER)
+    # --------------------------------------------------
     def build_context(self, documents):
-        texts = []
+        context_blocks = []
 
-        for doc in documents:
-            if isinstance(doc, dict):
-                texts.append(doc.get("text", ""))
-            else:
-                texts.append(str(doc))
+        for i, doc in enumerate(documents, start=1):
+            text = doc.get("text", "")
+            url = doc.get("metadata", {}).get("url", "unknown")
 
-        return "\n\n".join(texts)
+            block = f"[{i}] {text}\n(Source: {url})"
+            context_blocks.append(block)
+
+        return "\n\n".join(context_blocks)
