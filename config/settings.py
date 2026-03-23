@@ -1,4 +1,6 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
@@ -16,9 +18,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     class Config:
-        env_file = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), ".env"
-        )
+        env_file = ".env"
         case_sensitive = True
 
 
