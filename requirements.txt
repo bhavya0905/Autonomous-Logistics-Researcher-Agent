@@ -1,0 +1,16 @@
+pydantic
+pydantic-settings
+python-dotenv
+chromadb
+sentence-transformers
+tavily-python
+requests
+beautifulsoup4
+crewai
+langchain-text-splitters
+langchain-groq
+rank-bm25
+readability-lxml
+chardet
+langchain-groq
+langchain-community
